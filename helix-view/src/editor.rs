@@ -1464,6 +1464,11 @@ impl Editor {
         // Remove selections for the closed view on all documents.
         for doc in self.documents_mut() {
             doc.remove_view(id);
+            if let Some(swap_path) = &doc.swap_path {
+                if let Err(err) = std::fs::remove_file(swap_path) {
+                    log::error!("Failed to remove swap file: {}", err);
+                }
+            }
         }
         self.tree.remove(id);
         self._refresh();
@@ -1476,6 +1481,14 @@ impl Editor {
         };
         if !force && doc.is_modified() {
             return Err(CloseError::BufferModified(doc.display_name().into_owned()));
+        }
+
+        //Remove swap file
+        // TO-DO: Create error enum for swap file, make swap_path private and add getter
+        if let Some(swap_path) = &doc.swap_path {
+            if let Err(err) = std::fs::remove_file(swap_path) {
+                return Err(CloseError::SaveError(err.into()));
+            }
         }
 
         // This will also disallow any follow-up writes

@@ -141,6 +141,7 @@ pub struct Document {
     pub inlay_hints_oudated: bool,
 
     path: Option<PathBuf>,
+    pub swap_path: Option<PathBuf>,
     encoding: &'static encoding::Encoding,
     has_bom: bool,
 
@@ -650,6 +651,7 @@ impl Document {
         Self {
             id: DocumentId::default(),
             path: None,
+            swap_path: None,
             encoding,
             has_bom,
             text,
@@ -694,29 +696,55 @@ impl Document {
         config_loader: Option<Arc<syntax::Loader>>,
         config: Arc<dyn DynAccess<Config>>,
     ) -> Result<Self, Error> {
-        // Open the file if it exists, otherwise assume it is a new file (and thus empty).
-        let (rope, encoding, has_bom) = if path.exists() {
-            let mut file =
-                std::fs::File::open(path).context(format!("unable to open {:?}", path))?;
+        let swap_file_path = name_swap_file(path);
+
+        // Check if files exist
+        let swap_file_exists = swap_file_path.exists();
+        let original_file_exists = path.exists();
+    
+        // Decide what to do based on existence of files
+        let (rope, encoding, has_bom) = if swap_file_exists {
+            if original_file_exists {
+                // Swap file and original file both exist, indicating potential conflict
+                bail!("Conflict detected: Swap file '{}' and original file '{}' both exist. Resolve the conflict before editing.", swap_file_path.display(), path.display());
+            } else {
+                // Swap file exists, but no original file (potentially crashed without saving, continue editing)
+                let mut file = std::fs::File::open(&swap_file_path).context(format!("unable to open {:?}", swap_file_path))?;
+                from_reader(&mut file, encoding)?
+            }
+        } else if original_file_exists {
+            // Path exists; create a new swap file from the original file
+            std::fs::copy(path, &swap_file_path).context(format!("unable to create swap file {:?} from {:?}", swap_file_path, path))?;
+    
+            // Open the newly created swap file for editing
+            let mut file = std::fs::File::open(&swap_file_path).context(format!("unable to open {:?}", swap_file_path))?;
             from_reader(&mut file, encoding)?
         } else {
+            // Neither swap nor original file exists; create a new empty swap file
+            std::fs::File::create(&swap_file_path).context(format!("unable to create swap file {:?}", swap_file_path))?;
             let line_ending: LineEnding = config.load().default_line_ending.into();
             let encoding = encoding.unwrap_or(encoding::UTF_8);
             (Rope::from(line_ending.as_str()), encoding, false)
         };
-
+    
         let mut doc = Self::from(rope, Some((encoding, has_bom)), config);
-
-        // set the path and try detecting the language
-        doc.set_path(Some(path));
+    
+        // Set paths
+        // TO-DO: Create fetter for swap_path
+        doc.set_path(Some(&path.to_path_buf()));
+        doc.swap_path = Some(swap_file_path);
+    
+        // Try detecting the language
         if let Some(loader) = config_loader {
             doc.detect_language(loader);
         }
-
+    
         doc.detect_indent_and_line_ending();
-
+    
         Ok(doc)
     }
+    
+    
 
     /// The same as [`format`], but only returns formatting changes if auto-formatting
     /// is configured.
@@ -862,6 +890,8 @@ impl Document {
             }
         };
 
+        let swap_file_path = self.swap_path.clone();
+
         let identifier = self.path().map(|_| self.identifier());
         let language_servers = self.language_servers.clone();
 
@@ -897,8 +927,19 @@ impl Document {
                 }
             }
 
-            let mut file = File::create(&path).await?;
-            to_writer(&mut file, encoding_with_bom_info, &text).await?;
+            // We should have a swap_file_path, but we won't if it is a scratch buffer, so let's create a swap in case editing continues after write.
+            // I think it might be nice to create swaps for scratch buffers as well, but I'm not sure if this can work right now since multiple scratch buffers are possible.
+            let swap = match swap_file_path {
+                Some(swap) => swap,
+                None => name_swap_file(&path),
+            };
+
+            // Create or open the swap file and write to it
+            let mut swap_file = File::create(&swap).await?;
+            to_writer(&mut swap_file, encoding_with_bom_info, &text).await?;
+            
+            // Copy swap file to path
+            std::fs::copy(&swap, &path)?;
 
             let event = DocumentSavedEvent {
                 revision: current_rev,
@@ -1825,6 +1866,13 @@ impl Document {
     pub fn reset_all_inlay_hints(&mut self) {
         self.inlay_hints = Default::default();
     }
+}
+
+fn name_swap_file(path: &Path) -> PathBuf {
+    let file_name = path.file_name().expect("Invalid path");
+    let swap_file_name = format!(".{}.hxs", file_name.to_str().expect("Invalid file name"));
+    let swap_file_path = path.with_file_name(swap_file_name);
+    swap_file_path
 }
 
 #[derive(Clone, Debug)]
