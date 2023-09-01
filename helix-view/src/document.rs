@@ -890,7 +890,16 @@ impl Document {
             }
         };
 
-        let swap_file_path = self.swap_path.clone();
+        // We should have a swap_file_path, but we won't if it is a scratch buffer, so let's create a swap in case editing continues after write.
+        // I think it might be nice to create swaps for scratch buffers as well, but I'm not sure if this can work right now since multiple scratch buffers are possible.
+        let swap_path = match &self.swap_path {
+            Some(swap_path) => helix_core::path::get_canonicalized_path(&swap_path),
+            None => {
+                let path = name_swap_file(&path);
+                self.swap_path = Some(path.clone());
+                path
+            },
+        };
 
         let identifier = self.path().map(|_| self.identifier());
         let language_servers = self.language_servers.clone();
@@ -927,19 +936,13 @@ impl Document {
                 }
             }
 
-            // We should have a swap_file_path, but we won't if it is a scratch buffer, so let's create a swap in case editing continues after write.
-            // I think it might be nice to create swaps for scratch buffers as well, but I'm not sure if this can work right now since multiple scratch buffers are possible.
-            let swap = match swap_file_path {
-                Some(swap) => swap,
-                None => name_swap_file(&path),
-            };
 
             // Create or open the swap file and write to it
-            let mut swap_file = File::create(&swap).await?;
+            let mut swap_file = File::create(swap_path.as_path()).await?;
             to_writer(&mut swap_file, encoding_with_bom_info, &text).await?;
             
             // Copy swap file to path
-            std::fs::copy(&swap, &path)?;
+            std::fs::copy(swap_path.as_path(), &path)?;
 
             let event = DocumentSavedEvent {
                 revision: current_rev,
