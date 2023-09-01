@@ -1379,7 +1379,14 @@ impl Component for EditorView {
             }
 
             Event::Mouse(event) => self.handle_mouse_event(event, &mut cx),
-            Event::IdleTimeout => self.handle_idle_timeout(&mut cx),
+            Event::IdleTimeout => {
+                for doc in cx.editor.documents_mut() {
+                    if doc.swap_path.is_some() {
+                        let _future_result = doc.save_swap().unwrap();
+                    }
+                }
+                self.handle_idle_timeout(&mut cx)
+            }
             Event::FocusGained => {
                 self.terminal_focused = true;
                 EventResult::Consumed(None)

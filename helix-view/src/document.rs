@@ -970,6 +970,87 @@ impl Document {
         Ok(future)
     }
 
+    pub fn save_swap(
+        &mut self,
+    ) -> Result<
+        impl Future<Output = Result<DocumentSavedEvent, anyhow::Error>> + 'static + Send,
+        anyhow::Error,
+    > {
+        self.save_swap_impl()
+
+        // futures_util::future::Ready<_>,
+    }
+
+    fn save_swap_impl(
+        &mut self,
+    ) -> Result<
+        impl Future<Output = Result<DocumentSavedEvent, anyhow::Error>> + 'static + Send,
+        anyhow::Error,
+    > {
+        log::debug!(
+            "submitting save of doc swap file '{:?}'",
+            self.path().map(|path| path.to_string_lossy())
+        );
+
+        //Only runs when we have a swap file set
+        //Will basically be save_impl but without the copy to path
+
+        let text = self.text().clone();
+
+        let swap_path = match &self.swap_path {
+            Some(path) => helix_core::path::get_canonicalized_path(&path),
+            None => {
+                if self.path.is_none() {
+                    bail!("Can't save with no path set!");
+                }
+                self.path.as_ref().unwrap().clone()
+            }
+        };
+
+        let identifier = self.path().map(|_| self.identifier());
+        let language_servers = self.language_servers.clone();
+
+        // mark changes up to now as saved
+        let current_rev = self.get_current_revision();
+        let doc_id = self.id();
+
+        let encoding_with_bom_info = (self.encoding, self.has_bom);
+
+        // We encode the file according to the `Document`'s encoding.
+        let future = async move {
+            use tokio::fs::File;
+
+            // Create or open the swap file and write to it
+            let mut swap_file = File::create(&swap_path.as_path()).await?;
+            to_writer(&mut swap_file, encoding_with_bom_info, &text).await?;
+            
+            let event = DocumentSavedEvent {
+                revision: current_rev,
+                doc_id,
+                path: swap_path.clone(),
+                text: text.clone(),
+            };
+
+            for (_, language_server) in language_servers {
+                if !language_server.is_initialized() {
+                    return Ok(event);
+                }
+                if let Some(identifier) = &identifier {
+                    if let Some(notification) =
+                        language_server.text_document_did_save(identifier.clone(), &text)
+                    {
+                        notification.await?;
+                    }
+                }
+            }
+
+            Ok(event)
+        };
+
+        Ok(future)
+    }
+
+
     /// Detect the programming language based on the file type.
     pub fn detect_language(&mut self, config_loader: Arc<syntax::Loader>) {
         self.set_language(
