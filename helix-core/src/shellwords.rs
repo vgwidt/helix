@@ -92,13 +92,7 @@ impl<'a> From<&'a str> for Shellwords<'a> {
                             Unquoted
                         }
                     }
-                    '"' => {
-                        if cfg!(windows) {
-                            Quoted
-                        } else {
-                            Unquoted
-                        }
-                    }
+                    '"' => Dquoted,
                     c if c.is_ascii_whitespace() => {
                         end = i;
                         OnWhitespace
@@ -133,10 +127,11 @@ impl<'a> From<&'a str> for Shellwords<'a> {
                             Dquoted
                         }
                     }
-                    '"' => {
-                        end = i;
-                        OnWhitespace
-                    }
+                    '\"' => DquoteEscaped,
+                    // '"' => {
+                    //     end = i;
+                    //     OnWhitespace
+                    // }
                     _ => Dquoted,
                 },
                 DquoteEscaped => Dquoted,
