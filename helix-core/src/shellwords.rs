@@ -320,6 +320,21 @@ mod test {
     }
 
     #[test]
+    #[cfg(windows)]
+    fn test_windows_open_path() {
+        let input =
+            r#":open C:\"Program Files"\"Test file.txt""#;
+        let shellwords = Shellwords::from(input);
+        let result = shellwords.words().to_vec();
+        let expected = vec![
+            Cow::from(":open"),
+            Cow::from(r#"C:\"Program Files"\"Test file.txt""#),
+            //C:\\\"Program File\"\\\"Test file.txt\"
+        ];
+        assert_eq!(expected, result);
+    }
+
+    #[test]
     #[cfg(unix)]
     fn test_escaping_unix() {
         assert_eq!(escape("foobar".into()), Cow::Borrowed("foobar"));

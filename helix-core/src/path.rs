@@ -27,12 +27,7 @@ pub fn expand_tilde(path: &Path) -> PathBuf {
         }
     }
 
-    if cfg!(windows) {
-        // remove double quotes from paths from Windows
-        PathBuf::from(path.to_string_lossy().replace("\"", ""))
-    } else {
-        path.to_path_buf()
-    }
+    path.to_path_buf()
 }
 
 /// Normalize a path, removing things like `.` and `..`.
@@ -164,4 +159,14 @@ pub fn get_truncated_path<P: AsRef<Path>>(path: P) -> PathBuf {
     }
     ret.push(file);
     ret
+}
+
+/// Removes double quotes from Windows paths, otherwise returns path unchanged.
+pub fn remove_quotes_from_windows_path(path: &Path) -> PathBuf {
+    if cfg!(windows) {
+        // remove double quotes from paths from Windows
+        PathBuf::from(path.to_string_lossy().replace("\"", ""))
+    } else {
+        path.to_path_buf()
+    }
 }
