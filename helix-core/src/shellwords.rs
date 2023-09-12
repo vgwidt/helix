@@ -13,7 +13,13 @@ pub fn escape(input: Cow<str>) -> Cow<str> {
             buf
         }))
     } else {
-        Cow::Owned(format!("\"{}\"", input))
+        let buf = if input.ends_with('\\') {
+            format!("\"{}\"\\", input.trim_end_matches('\\'))
+        } else {
+            format!("\"{}\"", input)
+        };
+        
+        Cow::Owned(buf)
     }
 }
 
