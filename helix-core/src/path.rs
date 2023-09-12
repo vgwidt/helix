@@ -27,7 +27,12 @@ pub fn expand_tilde(path: &Path) -> PathBuf {
         }
     }
 
-    path.to_path_buf()
+    if cfg!(windows) {
+        // remove double quotes from paths from Windows
+        PathBuf::from(path.to_string_lossy().replace("\"", ""))
+    } else {
+        path.to_path_buf()
+    }
 }
 
 /// Normalize a path, removing things like `.` and `..`.

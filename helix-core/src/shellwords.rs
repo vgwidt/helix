@@ -14,6 +14,7 @@ pub fn escape(input: Cow<str>) -> Cow<str> {
         }))
     } else {
         Cow::Owned(format!("\"{}\"", input))
+        // Cow::Owned(format!("{}", input))
     }
 }
 
@@ -82,6 +83,13 @@ impl<'a> From<&'a str> for Shellwords<'a> {
                             escaped.push_str(&input[unescaped_start..i]);
                             unescaped_start = i + 1;
                             UnquotedEscaped
+                        } else {
+                            Unquoted
+                        }
+                    }
+                    '"' => {
+                        if cfg!(windows) {
+                            Quoted
                         } else {
                             Unquoted
                         }
