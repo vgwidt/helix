@@ -14,7 +14,6 @@ pub fn escape(input: Cow<str>) -> Cow<str> {
         }))
     } else {
         Cow::Owned(format!("\"{}\"", input))
-        // Cow::Owned(format!("{}", input))
     }
 }
 
