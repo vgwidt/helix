@@ -18,7 +18,7 @@ pub fn escape(input: Cow<str>) -> Cow<str> {
         } else {
             format!("\"{}\"", input)
         };
-        
+
         Cow::Owned(buf)
     }
 }
@@ -133,7 +133,14 @@ impl<'a> From<&'a str> for Shellwords<'a> {
                             Dquoted
                         }
                     }
-                    '"' => Unquoted,
+                    '"' => {
+                        if cfg!(unix) {
+                            end = i;
+                            OnWhitespace
+                        } else {
+                            Unquoted
+                        }
+                    }
                     _ => Dquoted,
                 },
                 DquoteEscaped => Dquoted,
