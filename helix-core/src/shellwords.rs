@@ -18,7 +18,7 @@ pub fn escape(input: Cow<str>) -> Cow<str> {
         } else {
             format!("\"{}\"", input)
         };
-        
+
         Cow::Owned(buf)
     }
 }
@@ -94,7 +94,7 @@ impl<'a> From<&'a str> for Shellwords<'a> {
                     }
                     '"' => {
                         if cfg!(windows) {
-                            Quoted
+                            Dquoted
                         } else {
                             Unquoted
                         }
@@ -133,10 +133,7 @@ impl<'a> From<&'a str> for Shellwords<'a> {
                             Dquoted
                         }
                     }
-                    '"' => {
-                        end = i;
-                        OnWhitespace
-                    }
+                    '"' => Unquoted,
                     _ => Dquoted,
                 },
                 DquoteEscaped => Dquoted,
@@ -322,17 +319,28 @@ mod test {
     #[test]
     #[cfg(windows)]
     fn test_windows_open_path() {
-        let input =
-            r#":open C:\"Program Files"\"Test file.txt""#;
+        let input = r#":open C:\"Program Files"\"Test file.txt""#;
         let shellwords = Shellwords::from(input);
         let result = shellwords.words().to_vec();
         let expected = vec![
             Cow::from(":open"),
             Cow::from(r#"C:\"Program Files"\"Test file.txt""#),
-            //C:\\\"Program File\"\\\"Test file.txt\"
         ];
         assert_eq!(expected, result);
     }
+
+    // #[test]
+    // #[cfg(windows)]
+    // fn test_windows_open_path2() {
+    //     let input = r#":open "C:\"Program Files"\"Test file.txt"""#;
+    //     let shellwords = Shellwords::from(input);
+    //     let result = shellwords.words().to_vec();
+    //     let expected = vec![
+    //         Cow::from(":open"),
+    //         Cow::from(r#""C:\"Program Files"\"Test file.txt"""#),
+    //     ];
+    //     assert_eq!(expected, result);
+    // }
 
     #[test]
     #[cfg(unix)]
